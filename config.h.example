@@ -1,0 +1,10 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+const char* ssid = "Your_SSID";
+const char* password = "Your_PASSWORD";
+
+const char *SUPABASE_URL = "Your_SUPABASE_URL";
+const char *SUPABASE_KEY = "Your_SUPABASE_KEY";
+
+#endif
