@@ -6,6 +6,11 @@
 
 #include "config.h"
 
+#define KODE_SENSOR1 "1"
+#define KODE_SENSOR2 "2"
+#define KODE_SENSOR3 "31"
+#define PEMANTAUAN_APIKEY "4e2b81262d82aa438205e25dc56a5488"
+
 #define MQ2_PIN A0
 
 #define DHT_PIN D4
@@ -61,6 +66,55 @@ void sendDataToSupabase(int mq2Value, float temperature, float humidity)
     else
     {
       Serial.print("Error on sending POST: ");
+      Serial.println(https.errorToString(httpResponseCode).c_str());
+      String errorResponse = https.getString();
+      Serial.println("Error response body: ");
+      Serial.println(errorResponse);
+    }
+
+    https.end();
+  }
+  else
+  {
+    Serial.println("WiFi not connected");
+  }
+}
+
+void sendDataToPemantauan(int mq2Value, float temperature, float humidity)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    String obyek1 = KODE_SENSOR1;
+    String obyek2 = KODE_SENSOR2;
+    String obyek3 = KODE_SENSOR3;
+    WiFiClientSecure client;
+
+    // Bypass SSL verification
+    client.setInsecure();
+
+    HTTPClient https;
+
+    String url = "https://www.pemantauan.com/submission/";
+
+    String httpRequestData = "apikey=" + String(PEMANTAUAN_APIKEY);
+    httpRequestData = httpRequestData + "&obyek1=" + obyek1;
+    httpRequestData = httpRequestData + "&value1=" + temperature;
+    httpRequestData = httpRequestData + "&obyek2=" + obyek2;
+    httpRequestData = httpRequestData + "&value2=" + humidity;
+    httpRequestData = httpRequestData + "&obyek3=" + obyek3;
+    httpRequestData = httpRequestData + "&value3=" + mq2Value;
+    https.begin(client, url);
+    https.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    int httpResponseCode = https.POST(httpRequestData);
+
+    if (httpResponseCode > 0)
+    {
+      Serial.print("HTTP Response code from pemantauan: ");
+      Serial.println(httpResponseCode);
+    }
+    else
+    {
+      Serial.print("Error on sending POST to Pemantauan: ");
       Serial.println(https.errorToString(httpResponseCode).c_str());
       String errorResponse = https.getString();
       Serial.println("Error response body: ");
@@ -136,5 +190,6 @@ void loop()
 
   // Send data to Supabase every 1 minutes
   sendDataToSupabase(mq2Value, temperature, humidity);
+  sendDataToPemantauan(mq2Value, temperature, humidity);
   delay(60000); // 1 minutes
 }
