@@ -1,15 +1,8 @@
 #include <DHT.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-
-// Please create config.h In the same folder as your Arduino sketch
-// #ifndef CONFIG_H
-// #define CONFIG_H
-
-// const char* ssid = "Your_SSID";
-// const char* password = "Your_PASSWORD";
-
-// #endif
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 #include "config.h"
 
@@ -33,6 +26,53 @@ String getSensorData()
   json += "\"humidity\":" + String(humidity);
   json += "}";
   return json;
+}
+
+void sendDataToSupabase(int mq2Value, float temperature, float humidity)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    WiFiClientSecure client;
+
+    // Bypass SSL verification
+    client.setInsecure();
+
+    HTTPClient https;
+
+    String url = String(SUPABASE_URL) + "/rest/v1/device_statistics";
+
+    String payload = "{";
+    payload += "\"smoke_level\":" + String(mq2Value) + ",";
+    payload += "\"temperature\":" + String(temperature) + ",";
+    payload += "\"humidity\":" + String(humidity);
+    payload += "}";
+
+    https.begin(client, url);
+    https.addHeader("Content-Type", "application/json");
+    https.addHeader("apikey", SUPABASE_KEY);
+
+    int httpResponseCode = https.POST(payload);
+
+    if (httpResponseCode > 0)
+    {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+    }
+    else
+    {
+      Serial.print("Error on sending POST: ");
+      Serial.println(https.errorToString(httpResponseCode).c_str());
+      String errorResponse = https.getString();
+      Serial.println("Error response body: ");
+      Serial.println(errorResponse);
+    }
+
+    https.end();
+  }
+  else
+  {
+    Serial.println("WiFi not connected");
+  }
 }
 
 void setup()
@@ -89,4 +129,12 @@ void setup()
 void loop()
 {
   server.handleClient();
+
+  int mq2Value = analogRead(MQ2_PIN);
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // Send data to Supabase every 1 minutes
+  sendDataToSupabase(mq2Value, temperature, humidity);
+  delay(60000); // 1 minutes
 }
