@@ -1,49 +1,26 @@
 #include <DHT.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 
 #include "config.h"
 
-#define KODE_SENSOR1 "1"
-#define KODE_SENSOR2 "2"
-#define KODE_SENSOR3 "31"
+#define KODE_SENSOR1 "8"
+#define KODE_SENSOR2 "27"
+#define KODE_SENSOR3 "28"
 #define PEMANTAUAN_APIKEY "4e2b81262d82aa438205e25dc56a5488"
 
 #define MQ2_PIN A0
-
 #define DHT_PIN D4
 #define DHT_TYPE DHT11
 DHT dht(DHT_PIN, DHT_TYPE);
 
-ESP8266WebServer server(80);
-
-String getSensorData()
-{
-  int mq2Value = analogRead(MQ2_PIN);
-  float temperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
-
-  String json = "{";
-  json += "\"mq2Value\":" + String(mq2Value) + ",";
-  json += "\"temperature\":" + String(temperature) + ",";
-  json += "\"humidity\":" + String(humidity);
-  json += "}";
-  return json;
-}
-
-void sendDataToSupabase(int mq2Value, float temperature, float humidity)
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
+void sendDataToSupabase(int mq2Value, float temperature, float humidity) {
+  if (WiFi.status() == WL_CONNECTED) {
     WiFiClientSecure client;
-
-    // Bypass SSL verification
     client.setInsecure();
 
     HTTPClient https;
-
     String url = String(SUPABASE_URL) + "/rest/v1/device_statistics";
 
     String payload = "{";
@@ -58,85 +35,56 @@ void sendDataToSupabase(int mq2Value, float temperature, float humidity)
 
     int httpResponseCode = https.POST(payload);
 
-    if (httpResponseCode > 0)
-    {
+    if (httpResponseCode > 0) {
       Serial.print("HTTP Response code: ");
       Serial.println(httpResponseCode);
-    }
-    else
-    {
+    } else {
       Serial.print("Error on sending POST: ");
       Serial.println(https.errorToString(httpResponseCode).c_str());
-      String errorResponse = https.getString();
-      Serial.println("Error response body: ");
-      Serial.println(errorResponse);
     }
 
     https.end();
-  }
-  else
-  {
+  } else {
     Serial.println("WiFi not connected");
   }
 }
 
-void sendDataToPemantauan(int mq2Value, float temperature, float humidity)
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    String obyek1 = KODE_SENSOR1;
-    String obyek2 = KODE_SENSOR2;
-    String obyek3 = KODE_SENSOR3;
+void sendDataToPemantauan(int mq2Value, float temperature, float humidity) {
+  if (WiFi.status() == WL_CONNECTED) {
     WiFiClientSecure client;
-
-    // Bypass SSL verification
     client.setInsecure();
 
     HTTPClient https;
-
     String url = "https://www.pemantauan.com/submission/";
 
     String httpRequestData = "apikey=" + String(PEMANTAUAN_APIKEY);
-    httpRequestData = httpRequestData + "&obyek1=" + obyek1;
-    httpRequestData = httpRequestData + "&value1=" + temperature;
-    httpRequestData = httpRequestData + "&obyek2=" + obyek2;
-    httpRequestData = httpRequestData + "&value2=" + humidity;
-    httpRequestData = httpRequestData + "&obyek3=" + obyek3;
-    httpRequestData = httpRequestData + "&value3=" + mq2Value;
+    httpRequestData += "&obyek1=" + String(KODE_SENSOR1) + "&value1=" + temperature;
+    httpRequestData += "&obyek2=" + String(KODE_SENSOR2) + "&value2=" + humidity;
+    httpRequestData += "&obyek3=" + String(KODE_SENSOR3) + "&value3=" + mq2Value;
+
     https.begin(client, url);
     https.addHeader("Content-Type", "application/x-www-form-urlencoded");
     int httpResponseCode = https.POST(httpRequestData);
 
-    if (httpResponseCode > 0)
-    {
-      Serial.print("HTTP Response code from pemantauan: ");
+    if (httpResponseCode > 0) {
+      Serial.print("HTTP Response code from Pemantauan: ");
       Serial.println(httpResponseCode);
-    }
-    else
-    {
+    } else {
       Serial.print("Error on sending POST to Pemantauan: ");
       Serial.println(https.errorToString(httpResponseCode).c_str());
-      String errorResponse = https.getString();
-      Serial.println("Error response body: ");
-      Serial.println(errorResponse);
     }
 
     https.end();
-  }
-  else
-  {
+  } else {
     Serial.println("WiFi not connected");
   }
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(9600);
-  Serial.println("Starting the server...");
 
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
+  while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi...");
   }
@@ -145,51 +93,15 @@ void setup()
   Serial.println(WiFi.localIP());
 
   dht.begin();
-
-  server.on("/", HTTP_GET, []()
-            {
-              String html = "<html><body><h1>Sensor Data</h1>";
-              html += "<p><strong>MQ2 Value (Smoke): </strong><span id=\"mq2Value\"></span></p>";
-              html += "<p><strong>Temperature: </strong><span id=\"temperature\"></span> °C</p>";
-              html += "<p><strong>Humidity: </strong><span id=\"humidity\"></span> %</p>";
-
-              // JavaScript for AJAX calls
-              html += "<script>";
-              html += "function fetchData() {";
-              html += "  fetch('/data').then(response => response.json()).then(data => {";
-              html += "    document.getElementById('mq2Value').textContent = data.mq2Value;";
-              html += "    document.getElementById('temperature').textContent = data.temperature;";
-              html += "    document.getElementById('humidity').textContent = data.humidity;";
-              html += "  });";
-              html += "}";
-              html += "setInterval(fetchData, 2000);"; // Update every 2 seconds
-              html += "fetchData();";                  // Initial data fetch
-              html += "</script>";
-              html += "</body></html>";
-
-              server.send(200, "text/html", html); // Send HTML response
-            });
-
-  server.on("/data", HTTP_GET, []()
-            {
-              String sensorData = getSensorData();
-              server.send(200, "application/json", sensorData); // Send sensor data as JSON
-            });
-
-  server.begin();
-  Serial.println("Server started");
 }
 
-void loop()
-{
-  server.handleClient();
-
+void loop() {
   int mq2Value = analogRead(MQ2_PIN);
   float temperature = dht.readTemperature();
   float humidity = dht.readHumidity();
 
-  // Send data to Supabase every 1 minutes
   sendDataToSupabase(mq2Value, temperature, humidity);
   sendDataToPemantauan(mq2Value, temperature, humidity);
-  delay(60000); // 1 minutes
+
+  delay(60000); // Send data every 1 minute
 }
