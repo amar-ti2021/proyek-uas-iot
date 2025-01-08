@@ -12,11 +12,21 @@
 
 #define MQ2_PIN A0
 #define DHT_PIN D4
+#define RED_LAMP_PIN D12
+#define BLUE_LAMP_PIN D13
 #define DHT_TYPE DHT11
+
+int currentMillis = 0;
+int previousMillis = 0;
+int interval = 30000;
+int warningIteration = 0;
+
 DHT dht(DHT_PIN, DHT_TYPE);
 
-void sendDataToSupabase(int mq2Value, float temperature, float humidity) {
-  if (WiFi.status() == WL_CONNECTED) {
+void sendDataToSupabase(int mq2Value, float temperature, float humidity)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
     WiFiClientSecure client;
     client.setInsecure();
 
@@ -35,22 +45,29 @@ void sendDataToSupabase(int mq2Value, float temperature, float humidity) {
 
     int httpResponseCode = https.POST(payload);
 
-    if (httpResponseCode > 0) {
+    if (httpResponseCode > 0)
+    {
       Serial.print("HTTP Response code: ");
       Serial.println(httpResponseCode);
-    } else {
+    }
+    else
+    {
       Serial.print("Error on sending POST: ");
       Serial.println(https.errorToString(httpResponseCode).c_str());
     }
 
     https.end();
-  } else {
+  }
+  else
+  {
     Serial.println("WiFi not connected");
   }
 }
 
-void sendDataToPemantauan(int mq2Value, float temperature, float humidity) {
-  if (WiFi.status() == WL_CONNECTED) {
+void sendDataToPemantauan(int mq2Value, float temperature, float humidity)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
     WiFiClientSecure client;
     client.setInsecure();
 
@@ -66,28 +83,40 @@ void sendDataToPemantauan(int mq2Value, float temperature, float humidity) {
     https.addHeader("Content-Type", "application/x-www-form-urlencoded");
     int httpResponseCode = https.POST(httpRequestData);
 
-    if (httpResponseCode > 0) {
+    if (httpResponseCode > 0)
+    {
       Serial.print("HTTP Response code from Pemantauan: ");
       Serial.println(httpResponseCode);
-    } else {
+    }
+    else
+    {
       Serial.print("Error on sending POST to Pemantauan: ");
       Serial.println(https.errorToString(httpResponseCode).c_str());
     }
 
     https.end();
-  } else {
+  }
+  else
+  {
     Serial.println("WiFi not connected");
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
-
+  pinMode(RED_LAMP_PIN, OUTPUT);
+  pinMode(BLUE_LAMP_PIN, OUTPUT);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    digitalWrite(BLUE_LAMP_PIN, HIGH);
     delay(1000);
+    digitalWrite(BLUE_LAMP_PIN, LOW);
     Serial.println("Connecting to WiFi...");
+    delay(1000);
   }
+  digitalWrite(RED_LAMP_PIN, HIGH);
   Serial.println("Connected to WiFi");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
@@ -95,13 +124,37 @@ void setup() {
   dht.begin();
 }
 
-void loop() {
+void loop()
+{
   int mq2Value = analogRead(MQ2_PIN);
   float temperature = dht.readTemperature();
   float humidity = dht.readHumidity();
-
-  sendDataToSupabase(mq2Value, temperature, humidity);
-  sendDataToPemantauan(mq2Value, temperature, humidity);
-
-  delay(60000); // Send data every 1 minute
+  Serial.println(mq2Value);
+  if (mq2Value >= 300)
+  {
+    digitalWrite(BLUE_LAMP_PIN, HIGH);
+    delay(500);
+    digitalWrite(BLUE_LAMP_PIN, LOW);
+    delay(500);
+    digitalWrite(BLUE_LAMP_PIN, HIGH);
+    delay(500);
+    digitalWrite(BLUE_LAMP_PIN, LOW);
+    if (warningIteration % 5 == 0)
+    {
+      sendDataToSupabase(mq2Value, temperature, humidity);
+    }
+    warningIteration += 1;
+  }
+  else
+  {
+    warningIteration = 0;
+  }
+  currentMillis = millis();
+  if (currentMillis - currentMillis - previousMillis >= interval)
+  {
+    sendDataToSupabase(mq2Value, temperature, humidity);
+    sendDataToPemantauan(mq2Value, temperature, humidity);
+    previousMillis += currentMillis;
+  }
+  delay(500);
 }
